@@ -1,3 +1,103 @@
 root@osboxes:~# apt update
 root@osboxes:~# apt list | grep postgresql-15
 root@osboxes:~# apt install postgresql-15 postgresql-client-15 postgresql-contrib-15
+root@osboxes:~# locale -a | grep fi_FI
+root@osboxes:~# vi /etc/locale.gen
+
+# fi_FI ISO-8859-1
+ fi_FI.UTF-8 UTF-8
+# fi_FI@euro ISO-8859-15
+
+root@osboxes:~# locale-gen
+Generating locales (this might take a while)...
+  en_US.UTF-8... done
+  fi_FI.UTF-8... done
+Generation complete.
+
+root@osboxes:~# locale -a | grep fi_FI
+fi_FI.utf8
+
+root@osboxes:~# systemctl restart postgresql
+CREATE ROLE mironadb_owner;
+
+root@osboxes:~# su - postgres
+postgres@osboxes:~$ psql
+psql (15.14 (Debian 15.14-0+deb12u1))
+Type "help" for help.
+
+postgres=# CREATE DATABASE mironadb
+    OWNER mironadb_owner
+    ENCODING 'UTF8'
+    LC_COLLATE 'fi_FI.UTF-8'
+    LC_CTYPE 'fi_FI.UTF-8'
+    TEMPLATE template0;
+CREATE DATABASE
+postgres=#
+
+
+-- Taulu artistit
+CREATE TABLE artistit (
+    id SERIAL PRIMARY KEY,
+    nimi VARCHAR(100) NOT NULL
+);
+
+-- Taulu biisit
+CREATE TABLE biisit (
+    id SERIAL PRIMARY KEY,
+    artisti_id INT REFERENCES artistit(id),
+    nimi VARCHAR(150) NOT NULL,
+    julkaisuvuosi INT
+);
+
+-- Artistit
+INSERT INTO artistit (nimi) VALUES 
+('Mirona');
+
+-- Biisit
+INSERT INTO biisit (artisti_id, nimi, julkaisuvuosi) VALUES
+(1, 'Juhani', 2025),
+(1, 'Aamun Koitto', 2025);
+
+CREATE DOMAIN url AS TEXT
+    CHECK (VALUE ~* '^https?://');
+
+ALTER TABLE artistit
+ADD COLUMN URL url;
+
+alter table biisit
+add column URL url;
+
+update biisit
+set URL='https://mikseri.net/artists/mirona/juhani/625135/'
+where nimi='Juhani';
+
+update artistit
+set URL='https://mikseri.net/mirona/';
+
+insert into biisit (artisti_id,nimi,julkaisuvuosi) values (1,'Wanha Tähti',2025);
+insert into biisit (artisti_id,nimi,julkaisuvuosi) values (1,'Pian On Yö',2024);
+insert into biisit (artisti_id,nimi,julkaisuvuosi) values (1,'Telefooni Blues',2023);
+insert into biisit (artisti_id,nimi,julkaisuvuosi) values (1,'Pelle-Show',2023);
+insert into biisit (artisti_id,nimi,julkaisuvuosi) values (1,'Höpöä Tekee',2022);
+insert into biisit (artisti_id,nimi,julkaisuvuosi) values (1,'Ota Mitä Vaan',2022);
+insert into biisit (artisti_id,nimi,julkaisuvuosi) values (1,'Maailman Lapsi',2022);
+insert into biisit (artisti_id,nimi,julkaisuvuosi) values (1,'Joukahainen',2021);
+insert into biisit (artisti_id,nimi,julkaisuvuosi) values (1,'Kauppilanmäki',2021);
+insert into biisit (artisti_id,nimi,julkaisuvuosi) values (1,'Frankie''s Blues',2021);
+insert into biisit (artisti_id,nimi,julkaisuvuosi) values (1,'Jos 1 Ois 7',2021);
+insert into biisit (artisti_id,nimi,julkaisuvuosi) values (1,'Hirtettyjen Jumala',2020);
+insert into biisit (artisti_id,nimi,julkaisuvuosi) values (1,'Iltalaulu Reetalle',2020);
+insert into biisit (artisti_id,nimi,julkaisuvuosi) values (1,'Liskojen Yö',2018);
+insert into biisit (artisti_id,nimi,julkaisuvuosi) values (1,'SuperVeriSusiKuu',2020);
+insert into biisit (artisti_id,nimi,julkaisuvuosi) values (1,'Wirkkala',2018);
+insert into biisit (artisti_id,nimi,julkaisuvuosi) values (1,'Lättähattu (VR Class Dm7)',2018);
+insert into biisit (artisti_id,nimi,julkaisuvuosi) values (1,'Muuli',2017);
+insert into biisit (artisti_id,nimi,julkaisuvuosi) values (1,'Johnny Winter',2015);
+insert into biisit (artisti_id,nimi,julkaisuvuosi) values (1,'Laulu Onnesta',2018);
+insert into biisit (artisti_id,nimi,julkaisuvuosi) values (1,'Kurjet',2016);
+insert into biisit (artisti_id,nimi,julkaisuvuosi) values (1,'Jon Lord',2012);
+insert into biisit (artisti_id,nimi,julkaisuvuosi) values (1,'Kaikki On Nyt Päällään',2012);
+insert into biisit (artisti_id,nimi,julkaisuvuosi) values (1,'Ajan Kuva',2010);
+insert into biisit (artisti_id,nimi,julkaisuvuosi) values (1,'Maanantaiaamun Blues',2011);
+insert into biisit (artisti_id,nimi,julkaisuvuosi) values (1,'Menkööt Miten Menee',2009);
+	
