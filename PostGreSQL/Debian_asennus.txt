@@ -1,0 +1,3 @@
+root@osboxes:~# apt update
+root@osboxes:~# apt list | grep postgresql-15
+root@osboxes:~# apt install postgresql-15 postgresql-client-15 postgresql-contrib-15
