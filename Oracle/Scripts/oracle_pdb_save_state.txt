@@ -1,0 +1,63 @@
+https://smarttechways.com/2018/05/25/pluggable-database-saved-state-in-oracle/
+
+-- minulla oli triggeri PDB starttia varten, tämä ei kuitenkaan ole tie:
+
+alter trigger open_pdb1_on_startup disable;
+SELECT trigger_name, status FROM user_triggers;
+
+TRIGGER_NAME
+--------------------------------------------------------------------------------
+STATUS
+--------
+OPEN_PDB1_ON_STARTUP
+DISABLED
+
+show pdbs;
+
+    CON_ID CON_NAME                       OPEN MODE  RESTRICTED
+---------- ------------------------------ ---------- ----------
+         2 PDB$SEED                       READ ONLY  NO
+         3 PDB1                           READ WRITE NO
+SQL> alter pluggable database PDB1 save state;
+
+Pluggable database altered.
+
+
+SQL> shutdown immediate;
+Database closed.
+Database dismounted.
+ORACLE instance shut down.
+SQL> startup;
+ORACLE instance started.
+
+Total System Global Area 1275066664 bytes
+Fixed Size                  9177384 bytes
+Variable Size             956301312 bytes
+Database Buffers          301989888 bytes
+Redo Buffers                7598080 bytes
+Database mounted.
+Database opened.
+SQL> show pdbs;
+
+    CON_ID CON_NAME                       OPEN MODE  RESTRICTED
+---------- ------------------------------ ---------- ----------
+         2 PDB$SEED                       READ ONLY  NO
+         3 PDB1                           READ WRITE NO
+
+SQL> select a.name,b.state from v$pdbs a , dba_pdb_saved_states b where a.con_id = b.con_id;
+
+NAME                 STATE
+-------------------- --------------------
+PDB1                 OPEN
+
+SQL> SELECT con_name, instance_name, state FROM cdb_pdb_saved_states;
+
+CON_NAME             INSTANCE_NAME        STATE
+-------------------- -------------------- --------------------
+PDB1                 orcl                 OPEN
+
+SQL> SELECT con_id, con_name, state from dba_pdb_saved_states;
+
+    CON_ID CON_NAME             STATE
+---------- -------------------- --------------------
+         3 PDB1                 OPEN

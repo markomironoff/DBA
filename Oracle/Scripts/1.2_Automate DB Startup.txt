@@ -125,6 +125,7 @@ WantedBy=multi-user.target
 ##     )
 ##   )
 
+-- ei tarvitse rakentaa triggeriä vaan tallentaa SAVE STATE
 CREATE OR REPLACE TRIGGER open_pdb1_on_startup
 AFTER STARTUP ON DATABASE
 BEGIN
