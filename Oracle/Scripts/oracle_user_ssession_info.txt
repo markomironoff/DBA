@@ -1,0 +1,38 @@
+set linesize 200
+col username format a20
+col osuser format a20
+col program format a20
+col machine format a30
+set pages 1000
+
+SELECT sid, serial#, username, osuser, machine, program, status, logon_time
+FROM v$session
+WHERE type='USER'
+ORDER BY logon_time;
+
+
+set linesize 200
+col username format a20
+col osuser format a20
+col program format a40
+col machine format a30
+col pdb_name format a30
+set pages 1000
+
+SELECT 
+    s.sid, 
+    s.serial#, 
+    s.username, 
+    s.osuser, 
+    s.machine, 
+    s.program, 
+    s.status, 
+    s.logon_time,
+    s.con_id,
+    p.name AS pdb_name
+FROM v$session s
+LEFT JOIN v$pdbs p
+       ON s.con_id = p.con_id
+WHERE s.type = 'USER'
+AND s.username NOT IN ('SYS','SYSRAC')
+ORDER BY s.con_id, s.logon_time;

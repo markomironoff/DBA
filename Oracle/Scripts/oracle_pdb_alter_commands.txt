@@ -1,0 +1,17 @@
+-- 1️⃣ Avaa PDB normaalisti (read/write-tilassa, oletus)
+ALTER PLUGGABLE DATABASE pdb_name OPEN;
+
+-- 2️⃣ Avaa PDB read-only -tilassa
+ALTER PLUGGABLE DATABASE pdb_name OPEN READ ONLY;
+
+-- 3️⃣ Avaa PDB read/write -tilassa nimenomaisesti
+ALTER PLUGGABLE DATABASE pdb_name OPEN READ WRITE;
+
+-- 4️⃣ Sulje PDB
+ALTER PLUGGABLE DATABASE pdb_name CLOSE IMMEDIATE;  -- sulkee nopeasti, keskeyttää käynnissä olevat sessiot
+ALTER PLUGGABLE DATABASE pdb_name CLOSE NORMAL;     -- odottaa, että sessiot päättyvät luonnollisesti
+ALTER PLUGGABLE DATABASE pdb_name CLOSE ABORT;      -- pakottaa välittömästi sulun, tietoja saattaa hävitä
+
+-- 5️⃣ Mount-tila
+-- Huom: PDB:t voidaan MOUNT-tilaan asettaa vain tietyissä tilanteissa; yleensä käytetään CDB-tason hallintaan
+ALTER PLUGGABLE DATABASE pdb_name MOUNT;
