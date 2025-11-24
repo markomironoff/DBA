@@ -1,0 +1,157 @@
+#! /bin/bash
+##      -----------------------------------------------------------------------
+##
+##      Fujitsu Finland
+##      Copyright (c) Fujitsu Finland 2019
+##
+##      -----------------------------------------------------------------------
+##      $RCSfile: fuji_pg_check_pgpool_backend_connects.sh,v $
+##      $Revision: 1.0 $
+##
+##      /**** FOR LINUX ****/
+##
+##      Contents: Check pgpool active backend (DB) connects and 
+##      shutdown pgpool if primary connection is down and
+##      can't be repaired
+##
+##      $Author: rosenjyr $
+##      $Date: 2019/05/15 14:10:03 $
+##
+##      $Log: fuji_pg_check_pgpool_backend_connects.sh,v $
+##
+# Revision 1.0   2019/05/15 14:10:03 fijyrrose ()
+# Ensimmainen versio
+#
+##      -----------------------------------------------------------------------
+#
+#
+# Sijainti: /home/fujitsu/bin/check_pgpool/fuji_pg_check_pgpool_backend_connects.sh
+
+# Load common definitions
+. /home/fujitsu/conf/fuji_check_pgpool_common.sh
+
+RUNTIME_TMP=$WORKING_DIR/tmp/$fuji_progname_base.tmp
+touch $RUNTIME_TMP
+RUNTIME_TMP2=$WORKING_DIR/tmp/$fuji_progname_base.tmp2
+touch $RUNTIME_TMP2
+
+backend_down_status="3"
+
+echo " " > $WORKING_DIR/log/$fuji_progname_base.log
+IFS=","
+for my_hostname in $PGPOOL_HOSTS
+do 
+
+# Ajetaan ainoastaan "lokaalille" pgpoolille
+hostname -I | grep "$my_hostname" 1>/dev/null 2>&2
+if [ $? != 0 ]
+then
+  continue
+fi  
+cp /dev/null $RUNTIME_TMP
+cp /dev/null $RUNTIME_TMP2
+
+pool_count=$(timeout $COMMAND_TIMEOUT $PCP_NODE_COUNT -p $PCP_PORT -h $my_hostname -U $PCP_USER -w 2>$RUNTIME_TMP2)
+if [ $? != 0 ]
+then
+  cat $RUNTIME_TMP2 >> $WORKING_DIR/log/$fuji_progname_base.log
+  if chk_if_print_pgpool_message "MAJOR"
+  then
+    echo "MAJOR PGPOOL alert - database node main information not available" | \
+    ${WORKING_DIR}/bin/collect_alarms.sh $fuji_progname_base
+  fi # end if chk_if...
+  exit 1
+fi
+
+for (( n=0; n<$pool_count; n++ ))
+do
+  timeout $COMMAND_TIMEOUT $PCP_NODE_INFO -p $PCP_PORT -h $my_hostname -U $PCP_USER -w -n $n 1> $RUNTIME_TMP2 2>&1 
+  if [ $? != 0 ]
+  then
+    cat $RUNTIME_TMP2 >> $WORKING_DIR/log/$fuji_progname_base.log
+    if chk_if_print_pgpool_message "MAJOR"
+    then
+      echo "MAJOR PGPOOL alert - database node $n information not available" | \
+      ${WORKING_DIR}/bin/collect_alarms.sh $fuji_progname_base
+    fi # end if chk_if...
+    exit 1
+  fi
+
+  cat $RUNTIME_TMP2 >> $WORKING_DIR/log/$fuji_progname_base.log
+  IFS=" "
+  while read hostname port_number status load_balance_weight status_name backend_role replication_delay last_status_change_time; do
+    if [ "$backend_role" = "primary" -a "$status" = "$backend_down_status" ]
+    then
+      echo "Tehdaan elvytys  nodelle $n"
+      timeout $COMMAND_TIMEOUT $PCP_ATTACH_NODE -p $PCP_PORT -h $my_hostname -U $PCP_USER -w -n $n 1> $RUNTIME_TMP 2>&1
+      if [ $? != 0 ]
+      then
+        cat $RUNTIME_TMP >> $WORKING_DIR/log/$fuji_progname_base.log
+        if chk_if_print_pgpool_message "MAJOR"
+          then
+          echo "MAJOR PGPOOL alert - Can not attach  node $n" | \
+          ${WORKING_DIR}/bin/collect_alarms.sh $fuji_progname_base
+        fi # end if chk_if...
+        exit 1
+      fi
+
+    # odotetaan hetki ja otetaan status
+    sleep $COMMAND_TIMEOUT
+    # Koitetaan client yhteytta. Jos yhteysstatus on 1 saattaa tama muuttaa sen 2:ksi
+    timeout $timeout_sec $PSQL  -v ON_ERROR_STOP=1 -h $my_hostname -p $pg_check_port -U $pg_check_user postgres -c "show pool_nodes;" 1> /dev/null 2>&1
+    timeout $COMMAND_TIMEOUT $PCP_NODE_INFO -p $PCP_PORT -h $my_hostname -U $PCP_USER -w -n $n 1> $RUNTIME_TMP 2>&1
+    if [ $? != 0 ]
+    then
+      cat $RUNTIME_TMP >> $WORKING_DIR/log/$fuji_progname_base.log
+      if chk_if_print_pgpool_message "MAJOR"
+      then
+        echo "MAJOR PGPOOL alert - database node $n information not available" | \
+        ${WORKING_DIR}/bin/collect_alarms.sh $fuji_progname_base
+      fi # end if chk_if...
+      exit 1
+    fi
+    IFS=" "
+    while read hostname2 port_number2 status2 load_balance_weight2 status_name2 backend_role2 replication_delay2 last_status_change_time;do
+      # Koitetaan josko saadaan client yhteys
+      # Jos yhteys on viela alhaalla sammutetaan pgpool
+      if [ "$backend_role2" = "primary" -a "$status2" = "$backend_down_status" ]
+      then
+        if chk_if_print_pgpool_message "MAJOR"
+        then
+          echo "MAJOR PGPOOL alert - Connection to primary DB down,  have to shutdown pgpool" | \
+          ${WORKING_DIR}/bin/collect_alarms.sh $fuji_progname_base
+        fi
+        timeout $COMMAND_TIMEOUT $PCP_STOP_PGPOOL -p $PCP_PORT -h $my_hostname -U $PCP_USER -w -m f 1> $RUNTIME_TMP 2>&1
+        if [ $? != 0 ]
+        then
+          cat $RUNTIME_TMP >> $WORKING_DIR/log/$fuji_progname_base.log
+          if chk_if_print_pgpool_message "MAJOR"
+          then
+            echo "MAJOR PGPOOL alert - can not shutdown pgpool" | \
+            ${WORKING_DIR}/bin/collect_alarms.sh $fuji_progname_base
+          fi # end if chk_if...
+          exit 1
+        fi
+      fi # backend_role ...
+     done <$RUNTIME_TMP 
+ 
+    fi # backend_role ..
+  done <$RUNTIME_TMP2 # while read
+done # for pool count loop
+done # for my_hostname loop
+
+if [ "$1" = "show" ]
+then
+  cat $WORKING_DIR/log/$fuji_progname_base.log
+fi
+
+rm -f $TMPFILE 1>/dev/null 2>&1
+rm -f $RUNTIME_STANDBY_TMP 1>/dev/null 2>&1
+rm -f $RUNTIME_ROLE_TMP 1>/dev/null 2>&1
+rm -f $RUNTIME_TMP2 1>/dev/null 2>&1
+# Poistetaan lopuksi mahdolliset turhat lipputiedostot
+# (ja toisaalta sailytetaan kaytossa olevat)
+rm_old_flag_files
+
+exit 0
+

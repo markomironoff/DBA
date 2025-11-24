@@ -1,0 +1,2 @@
+24.11.25 11:46 fscloud-iac01: OK PGCHECK POSTGRES_BACKENDS OK: DB "postgres" 1 of 100 connections (1%) | time=0.01s capacity2=0,85,95,0,100 fuji_dba_db=0,85,95,0,100 postgres=1,85,95,0,100 template0=0,85,95,0,100 template1=0,85,95,0,100 terraform_backend=0,85,95,0,100
+ 

@@ -1,0 +1,62 @@
+*=*HEADER==============================================================
+*=*Date: Wed Nov 19 00:19:01 EET 2025
+*=*Script: /home/fujitsu/bin/fuji_pg_dump.sh
+*=*Args: 
+*=*Node: fscloud-iac01
+*=*User: postgres
+*=*
+*=*BODY==============================================================
+Poistetaan kaikki sisalto hakemistosta /pgbackup/inst1/pg_dumps
+*** Copy all database config files from /pgdata/inst1 ***
+'/pgdata/inst1/pg_hba.conf' -> '/pgbackup/inst1/pg_dumps/PG_confs_20251119/./pg_hba.conf'
+'/pgdata/inst1/pg_ident.conf' -> '/pgbackup/inst1/pg_dumps/PG_confs_20251119/./pg_ident.conf'
+'/pgdata/inst1/postgresql.auto.conf' -> '/pgbackup/inst1/pg_dumps/PG_confs_20251119/./postgresql.auto.conf'
+'/pgdata/inst1/postgresql.conf' -> '/pgbackup/inst1/pg_dumps/PG_confs_20251119/./postgresql.conf'
+*** pg_dumpall --globals-only ***
+	*** pg_dumpall: OK ***
+	-rw-r--r-- 1 postgres postgres 1296 Nov 19 00:19 /pgbackup/inst1/pg_dumps/Global_dump_20251119.sql
+Remove old dump files, Dir: /pgbackup/inst1/pg_dumps
+***   pg_dump database metadata: capacity2 ***
+	***   pg_dump database metadata: 	capacity2 	OK ***
+	-rw-r--r-- 1 postgres postgres 2373 Nov 19 00:19 /pgbackup/inst1/pg_dumps/capacity2/capacity2_metadata_20251119.sql
+Remove old metadata sql files, Dir: /pgbackup/inst1/pg_dumps/capacity2
+***   pg_dump database: capacity2 ***
+	***   pg_dump database: 	capacity2 	OK ***
+	-rw-r--r-- 1 postgres postgres 4964 Nov 19 00:19 /pgbackup/inst1/pg_dumps/capacity2/capacity2_20251119.dump
+Remove old dump files, Dir: /pgbackup/inst1/pg_dumps/capacity2
+***   pg_dump database metadata: fuji_dba_db ***
+	***   pg_dump database metadata: 	fuji_dba_db 	OK ***
+	-rw-r--r-- 1 postgres postgres 5989 Nov 19 00:19 /pgbackup/inst1/pg_dumps/fuji_dba_db/fuji_dba_db_metadata_20251119.sql
+Remove old metadata sql files, Dir: /pgbackup/inst1/pg_dumps/fuji_dba_db
+***   pg_dump database: fuji_dba_db ***
+	***   pg_dump database: 	fuji_dba_db 	OK ***
+	-rw-r--r-- 1 postgres postgres 6343 Nov 19 00:19 /pgbackup/inst1/pg_dumps/fuji_dba_db/fuji_dba_db_20251119.dump
+Remove old dump files, Dir: /pgbackup/inst1/pg_dumps/fuji_dba_db
+***   pg_dump database metadata: postgres ***
+	***   pg_dump database metadata: 	postgres 	OK ***
+	-rw-r--r-- 1 postgres postgres 1515 Nov 19 00:19 /pgbackup/inst1/pg_dumps/postgres/postgres_metadata_20251119.sql
+Remove old metadata sql files, Dir: /pgbackup/inst1/pg_dumps/postgres
+***   pg_dump database: postgres ***
+	***   pg_dump database: 	postgres 	OK ***
+	-rw-r--r-- 1 postgres postgres 1018 Nov 19 00:19 /pgbackup/inst1/pg_dumps/postgres/postgres_20251119.dump
+Remove old dump files, Dir: /pgbackup/inst1/pg_dumps/postgres
+***   pg_dump database metadata: template1 ***
+	***   pg_dump database metadata: 	template1 	OK ***
+	-rw-r--r-- 1 postgres postgres 2332 Nov 19 00:19 /pgbackup/inst1/pg_dumps/template1/template1_metadata_20251119.sql
+Remove old metadata sql files, Dir: /pgbackup/inst1/pg_dumps/template1
+***   pg_dump database: template1 ***
+	***   pg_dump database: 	template1 	OK ***
+	-rw-r--r-- 1 postgres postgres 1515 Nov 19 00:19 /pgbackup/inst1/pg_dumps/template1/template1_20251119.dump
+Remove old dump files, Dir: /pgbackup/inst1/pg_dumps/template1
+***   pg_dump database metadata: terraform_backend ***
+	***   pg_dump database metadata: 	terraform_backend 	OK ***
+	-rw-r--r-- 1 postgres postgres 2751 Nov 19 00:19 /pgbackup/inst1/pg_dumps/terraform_backend/terraform_backend_metadata_20251119.sql
+Remove old metadata sql files, Dir: /pgbackup/inst1/pg_dumps/terraform_backend
+***   pg_dump database: terraform_backend ***
+	***   pg_dump database: 	terraform_backend 	OK ***
+	-rw-r--r-- 1 postgres postgres 3034 Nov 19 00:19 /pgbackup/inst1/pg_dumps/terraform_backend/terraform_backend_20251119.dump
+Remove old dump files, Dir: /pgbackup/inst1/pg_dumps/terraform_backend
+*=*TRAILER=============================================================
+*=*Date: Wed Nov 19 00:19:02 EET 2025
+*=*Duration: 0:0:1 (hh:mm:ss)
+*=*END==============================================================

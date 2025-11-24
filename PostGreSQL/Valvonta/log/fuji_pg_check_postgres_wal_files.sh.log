@@ -1,0 +1,1 @@
+OK PGCHECK POSTGRES_WAL_FILES OK: DB "postgres" WAL files found: 4 | time=0.01s files=4,200,400

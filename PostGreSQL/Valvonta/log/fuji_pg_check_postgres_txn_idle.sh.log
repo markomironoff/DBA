@@ -1,0 +1,1 @@
+OK PGCHECK POSTGRES_TXN_IDLE OK: DB "postgres" no idle in transaction | time=0.01s transaction_time=0,600,7200

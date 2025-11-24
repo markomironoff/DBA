@@ -1,0 +1,1 @@
+OK PGCHECK POSTGRES_ARCHIVE_READY OK: DB "postgres" WAL ".ready" files found: 0 | time=0.01s files=0,20,50

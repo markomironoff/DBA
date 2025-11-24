@@ -1,0 +1,1 @@
+OK PGCHECK POSTGRES_LOCKS OK: DB "postgres" total=1  | time=0.01s capacity2.total=0,1200,4000 capacity2.waiting=0,4,10 fuji_dba_db.total=0,1200,4000 fuji_dba_db.waiting=0,4,10 postgres.total=1,1200,4000 postgres.waiting=0,4,10 template1.total=0,1200,4000 template1.waiting=0,4,10 terraform_backend.total=0,1200,4000 terraform_backend.waiting=0,4,10

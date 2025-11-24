@@ -1,0 +1,1 @@
+OK PGCHECK POSTGRES_QUERY_RUNTIME OK: DB "fuji_dba_db" query runtime: 0.00 seconds | time=0.01s query_time=0.00s,10,60

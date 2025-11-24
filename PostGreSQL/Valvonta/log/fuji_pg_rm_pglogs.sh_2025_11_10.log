@@ -1,0 +1,17 @@
+*=*HEADER==============================================================
+*=*Date: Mon Nov 10 22:00:01 EET 2025
+*=*Script: /home/fujitsu/bin/fuji_pg_rm_pglogs.sh
+*=*Args: 90 7
+*=*Node: fscloud-iac01
+*=*User: postgres
+*=*
+*=*BODY==============================================================
+Poistetaan:
+-rw------- 1 postgres postgres 14 Aug 11 00:00 /pgdata/inst1/pg_log/postgresql-2025-08-11_000000.log.bz2
+Pakataan:
+-rw------- 1 postgres postgres 705 Nov  2 07:47 /pgdata/inst1/pg_log/postgresql-2025-11-02_074724.log
+-rw------- 1 postgres postgres 7016 Nov  2 07:47 /pgdata/inst1/pg_log/postgresql-2025-11-02_000000.log
+*=*TRAILER=============================================================
+*=*Date: Mon Nov 10 22:00:01 EET 2025
+*=*Duration: 0:0:0 (hh:mm:ss)
+*=*END==============================================================

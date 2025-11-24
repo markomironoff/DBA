@@ -1,0 +1,1 @@
+OK PGCHECK POSTGRES_DISK_SPACE OK: DB "postgres" FS /dev/mapper/rhel-pgdata mounted on /pgdata is using 112.65 MB of 9.75 GB (2%) | time=0.01s size=118120448B

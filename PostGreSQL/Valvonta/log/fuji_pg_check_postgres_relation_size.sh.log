@@ -1,0 +1,1 @@
+OK PGCHECK POSTGRES_RELATION_SIZE OK: DB "terraform_backend" largest relation is table "pg_catalog.pg_proc": 648 kB | time=0.01s pg_catalog.pg_proc=663552B,10737418240,53687091200

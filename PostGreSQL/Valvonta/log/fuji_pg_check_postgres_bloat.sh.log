@@ -1,0 +1,1 @@
+OK PGCHECK POSTGRES_BLOAT OK: DB "terraform_backend" (db terraform_backend) table pg_catalog.pg_class rows:392 pages:13 shouldbe:11 (1.2X) wasted size:16384 (16 kB) | pg_catalog.pg_class=16384B

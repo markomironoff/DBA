@@ -1,0 +1,1 @@
+0 UNKNOWN PGCHECK POSTGRES_LAST_VACUUM UNKNOWN: DB "terraform_backend" No matching tables have ever been vacuumed | time=0.02s

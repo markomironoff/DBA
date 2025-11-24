@@ -1,0 +1,40 @@
+*=*HEADER==============================================================
+*=*Date: Fri Nov 14 20:00:01 EET 2025
+*=*Script: /home/fujitsu/bin/fuji_pg_basebackup.sh
+*=*Args: 
+*=*Node: fscloud-iac01
+*=*User: postgres
+*=*
+*=*BODY==============================================================
+Otettu pg_basebackup varmistus /pgdata/inst1 hakemistosta
+Tarripallot: 
+total 65868
+-rw------- 1 postgres postgres   284955 Nov 14 20:00 backup_manifest
+-rw------- 1 postgres postgres 67158528 Nov 14 20:00 base.tar
+Otettu tar varmistus WAL arkistoista
+Tarripallo: 
+-rw-r--r-- 1 postgres postgres 140867553 Nov 14 20:04 /pgbackup/inst1/pg_online_backups/fscloud-iac01-13.22--wal_arcs-20251114.tar.gz
+
+Backup archive info:
+START WAL LOCATION: B/AC000028 (file 000000010000000B000000AC)
+STOP WAL LOCATION: B/AC000F00 (file 000000010000000B000000AC)
+CHECKPOINT LOCATION: B/AC000060
+BACKUP METHOD: streamed
+BACKUP FROM: master
+START TIME: 2025-11-14 20:00:01 EET
+LABEL: pg_basebackup base backup
+START TIMELINE: 1
+STOP TIME: 2025-11-14 20:00:02 EET
+STOP TIMELINE: 1
+
+Poistetaan varmistusajankohtaa vanhemmat WAL arkistot
+eli vanhin sailytettava:
+-rw------- 1 postgres postgres 340 Nov 14 20:00 /pgbackup/inst1/archive/000000010000000B000000AC.00000028.backup
+ 
+Poistetaan vanhat arkistot:
+Poistetaan vanhat (>2kk) .backup tiedostot
+Palautuksen mallitiedosto: /pgbackup/inst1/pg_online_backups/fscloud-iac01-13.22-basebackup-20251114.how_to_restore.example
+*=*TRAILER=============================================================
+*=*Date: Fri Nov 14 20:04:15 EET 2025
+*=*Duration: 0:4:14 (hh:mm:ss)
+*=*END==============================================================

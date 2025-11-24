@@ -1,0 +1,1 @@
+CRITICAL PGCHECK POSTGRES_QUERY_TIME CRITICAL: DB "capacity2" longest query: 1310075s (15 days 3 hours 54 minutes 35 seconds) PID:4159694 database: username:replica address:172.31.179.72 port:35582 query:START_REPLICATION B/A1000000 TIMELINE 1 | time=0.01s query_time=1310075s,600,7200
