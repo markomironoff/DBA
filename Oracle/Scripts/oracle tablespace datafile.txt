@@ -1,0 +1,30 @@
+SELECT
+    df.tablespace_name,
+    ROUND(df.total_space_gb, 2) AS total_gb,
+    ROUND(df.total_space_gb - fs.free_space_gb, 2) AS used_gb,
+    ROUND(fs.free_space_gb, 2) AS free_gb,
+    ROUND(((df.total_space_gb - fs.free_space_gb) / df.total_space_gb) * 100, 2) AS pct_used,
+    ROUND((fs.free_space_gb / df.total_space_gb) * 100, 2) AS pct_free
+FROM
+    (SELECT tablespace_name,
+            SUM(bytes) / 1024 / 1024 / 1024 AS total_space_gb
+     FROM dba_data_files
+     WHERE tablespace_name = 'POMSEXECLARGELX'
+     GROUP BY tablespace_name) df,
+    (SELECT tablespace_name,
+            NVL(SUM(bytes),0) / 1024 / 1024 / 1024 AS free_space_gb
+     FROM dba_free_space
+     WHERE tablespace_name = 'POMSEXECLARGELX'
+     GROUP BY tablespace_name) fs
+WHERE df.tablespace_name = fs.tablespace_name;
+
+   SELECT file_name, bytes/1024/1024/1024 AS current_gb,
+       maxbytes/1024/1024/1024 AS max_gb,
+       autoextensible
+FROM dba_data_files
+WHERE tablespace_name = 'POMSEXECLARGELX';
+
+ ALTER TABLESPACE POMSEXECLARGELX
+ADD DATAFILE '+POMS_DATA/MESESPP/pomsexeclargelx02.dbf'
+SIZE 32G
+AUTOEXTEND ON NEXT 1G MAXSIZE 32767M;
