@@ -1,0 +1,1 @@
+SELECT TO_CHAR(action_time,'YYYY-MM-DD') as action_time,action,status,description,patch_id FROM DBA_REGISTRY_SQLPATCH ORDER by action_time;

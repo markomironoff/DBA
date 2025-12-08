@@ -1,8 +1,8 @@
 set linesize 200
 col username format a20
-col osuser format a20
-col program format a20
-col machine format a30
+col osuser format a10
+col program format a60
+col machine format a15
 set pages 1000
 
 SELECT sid, serial#, username, osuser, machine, program, status, logon_time
