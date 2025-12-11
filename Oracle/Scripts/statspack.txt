@@ -1,0 +1,113 @@
+# alussa oli
+
+cat /orabin/db/admin/dba/bin/statspack_snap.sh
+#!/bin/bash
+ORAENV_ASK=NO; export ORACLE_SID=MESFALCP_1; . /usr/local/bin/oraenv;
+export ORACLE_HOME=/orabin/db/19.3.0.0
+$ORACLE_HOME/bin/sqlplus / as sysdba << EOF
+alter session set current_schema=perfstat;
+execute statspack.snap(i_snap_level=>5);
+exit;
+EOF
+
+
+# hieman ketterämpi versio
+
+[oracle@sfisp-zorap6]$ cat statspack_snap.sh
+#!/bin/bash
+
+run_snap() {
+  export ORACLE_SID=$1
+  ORAENV_ASK=NO . /usr/local/bin/oraenv >/dev/null
+
+  $ORACLE_HOME/bin/sqlplus / as sysdba <<EOF
+alter session set current_schema=perfstat;
+execute statspack.snap(i_snap_level=>5);
+exit;
+EOF
+}
+
+run_snap MESFALCP_1
+run_snap MESKPOP_2
+run_snap MESSALP_2
+run_snap MESESPP_1
+run_snap MESTKUP_1
+
+#############
+
+
+
+#!/bin/bash
+
+# remove_statspack_logs.sh
+# 0 8 * * 5 /orabin/db/admin/dba/bin/remove_statspack_logs.sh >> /tmp/remove_statspack_logs_cron.log 2>&1
+
+LOG_DIR="/orabin/db/admin/dba/log"
+RUN_DATE=$(date +"%Y%m%d_%H%M%S")
+ARCHIVE="$LOG_DIR/logs_$RUN_DATE.tar.gz"
+
+echo "Starting log compression at $(date)"
+echo "Log directory: $LOG_DIR"
+
+# Ensure log directory exists
+if [ ! -d "$LOG_DIR" ]; then
+    echo "ERROR: Log directory does not exist: $LOG_DIR"
+    exit 1
+fi
+
+# Count .log files
+LOG_COUNT=$(find "$LOG_DIR" -maxdepth 1 -type f -name "*.log" | wc -l)
+
+if [ "$LOG_COUNT" -eq 0 ]; then
+    echo "No .log files found to compress."
+else
+    echo "Found $LOG_COUNT .log files. Creating archive: $ARCHIVE"
+
+    # Create archive containing only *.log files
+    tar -czf "$ARCHIVE" -C "$LOG_DIR" $(find "$LOG_DIR" -maxdepth 1 -type f -name "*.log" -printf "%f ")
+
+    # Verify tar success
+    if [ $? -eq 0 ]; then
+        echo "Archive successfully created: $ARCHIVE"
+        echo "Removing original .log files..."
+        find "$LOG_DIR" -maxdepth 1 -type f -name "*.log" -delete
+        echo "Log rotation completed."
+    else
+        echo "ERROR: Failed to create archive — NOT deleting .log files."
+        exit 1
+    fi
+fi
+
+# ajot
+
+
+--tarkistus
+set linesize 100
+col owner format a20
+SELECT owner, COUNT(*)
+FROM dba_tables
+WHERE table_name LIKE 'STATS$%'
+GROUP BY owner;
+
+
+--luonti
+cd $ORACLE_HOME/rdbms/admin
+sqlplus / as sysdba
+
+@spcreate.sql
+
+EXEC perfstat.statspack.snap;
+
+-- snap_id
+SELECT snap_id, snap_time
+FROM perfstat.stats$snapshot
+ORDER BY snap_id DESC;
+
+cd $ORACLE_HOME/rdbms/admin
+sqlplus / as sysdba
+
+SELECT MIN(snap_id) min_snap, MAX(snap_id) max_snap
+FROM perfstat.stats$snapshot
+WHERE snap_time > SYSDATE - 30;
+
+@spreport.sql
