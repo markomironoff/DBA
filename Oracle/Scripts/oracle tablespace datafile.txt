@@ -18,13 +18,15 @@ FROM
      GROUP BY tablespace_name) fs
 WHERE df.tablespace_name = fs.tablespace_name;
 
-   SELECT file_name, bytes/1024/1024/1024 AS current_gb,
+SELECT file_name, bytes/1024/1024/1024 AS current_gb,
        maxbytes/1024/1024/1024 AS max_gb,
        autoextensible
 FROM dba_data_files
-WHERE tablespace_name = 'POMSEXECLARGELX';
+WHERE tablespace_name = 'NRTDATA_LOB';
 
- ALTER TABLESPACE POMSEXECLARGELX
+ALTER DATABASE DATAFILE '+DATA1/NRTPROD/DATAFILE/nrtodsdata.283.1210073553' RESIZE 10G;
+
+ALTER TABLESPACE POMSEXECLARGELX
 ADD DATAFILE '+POMS_DATA/MESESPP/pomsexeclargelx02.dbf'
 SIZE 32G
 AUTOEXTEND ON NEXT 1G MAXSIZE 32767M;
