@@ -1,0 +1,48 @@
+SELECT file_name, bytes/1024/1024/1024 AS current_gb,
+       maxbytes/1024/1024/1024 AS max_gb,
+       autoextensible
+FROM dba_data_files
+WHERE tablespace_name = 'USER_DATA';
+
+
+TABLESPACE_NAME             TOTAL_GB    FREE_GB    USED_GB   FREE_PCT AUTOE     MAX_GB REMAINING_TO_MAX_GB
+------------------------- ---------- ---------- ---------- ---------- ----- ---------- -------------------
+USER_DATA                     242.75      11.93     230.82       4.91 YES          288               57.18
+SYSAUX                          1.64        .08       1.55       5.12 YES           32               30.45
+INDEX_DATA                         6        .43       5.57        7.2 YES           32               26.43
+SYSTEM                          2.35        .38       1.97      16.14 YES           32               30.03
+USERS                              0          0          0         80 YES           32                  32
+UNDOTBS1                           2       1.91        .09      95.37 YES           32               31.91
+UNDO_2                             2       1.96        .04      97.78 YES           32               31.96
+PERFSTAT                         .25        .25          0      99.61 YES           10                  10
+
+FILE_NAME                                                                                            CURRENT_GB     MAX_GB AUTOE
+---------------------------------------------------------------------------------------------------- ---------- ---------- -----
++DATA19/EMPP/1FC9693F237D92FAE063A047D6F252CF/DATAFILE/user_data.316.1177165911                           29.75 31.9999847 YES
++DATA19/EMPP/1FC9693F237D92FAE063A047D6F252CF/DATAFILE/user_data.317.1177165913                           27.75 31.9999847 YES
++DATA19/EMPP/1FC9693F237D92FAE063A047D6F252CF/DATAFILE/user_data.318.1177165913                              28 31.9999847 YES
++DATA19/EMPP/1FC9693F237D92FAE063A047D6F252CF/DATAFILE/user_data.319.1177165913                           28.75 31.9999847 YES
++DATA19/EMPP/1FC9693F237D92FAE063A047D6F252CF/DATAFILE/user_data.320.1177165913                           26.75 31.9999847 YES
++DATA19/EMPP/1FC9693F237D92FAE063A047D6F252CF/DATAFILE/user_data.321.1177165913                            25.5 31.9999847 YES
++DATA19/EMPP/1FC9693F237D92FAE063A047D6F252CF/DATAFILE/user_data.322.1177165915                           25.25 31.9999847 YES
++DATA19/EMPP/1FC9693F237D92FAE063A047D6F252CF/DATAFILE/user_data.323.1177165915                              25 31.9999847 YES
++DATA19/EMPP/1FC9693F237D92FAE063A047D6F252CF/DATAFILE/user_data.324.1177165915                              26 31.9999847 YES
+
+-- Näyttää ASM diskgroupin koon ja vapaan tilan gigoina
+SET LINESIZE 120
+COLUMN name FORMAT A20
+SELECT 
+    name AS diskgroup_name,
+    ROUND(total_mb/1024,2) AS total_gb,
+    ROUND(free_mb/1024,2) AS free_gb,
+    ROUND((total_mb-free_mb)/1024,2) AS used_gb,
+    ROUND((free_mb/total_mb)*100,2) AS free_pct
+FROM v$asm_diskgroup
+WHERE name = 'DATA19';
+
+ALTER TABLESPACE USER_DATA
+ADD DATAFILE
+SIZE 32766M
+AUTOEXTEND ON NEXT 1G MAXSIZE 32766M;
+
+
