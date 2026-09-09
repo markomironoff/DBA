@@ -1,0 +1,407 @@
+#!/bin/bash
+#
+# oracle_datapatch_runner_19c.sh
+#
+# Runs datapatch only on running Oracle Database 19c instances.
+# Excludes ASM and skips all non-19c databases, including Oracle 12.2.
+# Intended for non-CDB databases.
+#
+# Run as oracle user separately on KTPRODORA03 and KTPRODORA04.
+#
+
+LOGFILE="/tmp/oracle_datapatch_runner_19c_$(hostname)_$(date +%Y%m%d_%H%M%S).log"
+
+export ORACLE_BASE=/u01/app/oracle
+
+SUMMARY_SUCCESS=()
+SUMMARY_FAILED=()
+SUMMARY_SKIPPED=()
+
+echo "============================================================" | tee -a "$LOGFILE"
+echo "Oracle 19c Datapatch Runner"                                 | tee -a "$LOGFILE"
+echo "Node      : $(hostname)"                                    | tee -a "$LOGFILE"
+echo "Started   : $(date)"                                        | tee -a "$LOGFILE"
+echo "Log file  : $LOGFILE"                                       | tee -a "$LOGFILE"
+echo "============================================================" | tee -a "$LOGFILE"
+
+#
+# Find running Oracle database instances.
+# Everything after ora_smon_ is interpreted as ORACLE_SID.
+# ASM instances such as +ASM1 and +ASM2 are excluded.
+#
+DB_LIST=$(
+  ps -eo args= |
+    sed -n 's#^ora_smon_##p' |
+    grep -v '^+ASM' |
+    sort -u
+)
+
+if [ -z "$DB_LIST" ]; then
+  echo "ERROR: No running Oracle database instances found." |
+    tee -a "$LOGFILE"
+  exit 1
+fi
+
+echo "" | tee -a "$LOGFILE"
+echo "Running database instances found:" | tee -a "$LOGFILE"
+
+for DB in $DB_LIST; do
+  echo "  - $DB" | tee -a "$LOGFILE"
+done
+
+echo "" | tee -a "$LOGFILE"
+
+for DB in $DB_LIST; do
+
+  export ORACLE_SID="$DB"
+
+  echo "------------------------------------------------------------" |
+    tee -a "$LOGFILE"
+  echo "Processing instance: $ORACLE_SID" |
+    tee -a "$LOGFILE"
+  echo "------------------------------------------------------------" |
+    tee -a "$LOGFILE"
+
+  #
+  # Resolve ORACLE_HOME from /etc/oratab.
+  #
+  ORACLE_HOME=$(
+    awk -F: -v sid="$ORACLE_SID" '
+      $0 !~ /^[[:space:]]*#/ &&
+      $1 == sid {
+        print $2
+        exit
+      }
+    ' /etc/oratab
+  )
+
+  if [ -z "$ORACLE_HOME" ]; then
+    echo "ERROR: ORACLE_HOME not found in /etc/oratab for $ORACLE_SID." |
+      tee -a "$LOGFILE"
+
+    SUMMARY_FAILED+=("$ORACLE_SID (ORACLE_HOME not found)")
+    continue
+  fi
+
+  export ORACLE_HOME
+  export PATH="$ORACLE_HOME/OPatch:$ORACLE_HOME/bin:/usr/bin:/bin"
+
+  echo "ORACLE_SID  = $ORACLE_SID" | tee -a "$LOGFILE"
+  echo "ORACLE_HOME = $ORACLE_HOME" | tee -a "$LOGFILE"
+
+  #
+  # Validate required executables.
+  #
+  if [ ! -x "$ORACLE_HOME/bin/sqlplus" ]; then
+    echo "ERROR: SQL*Plus is not executable under $ORACLE_HOME." |
+      tee -a "$LOGFILE"
+
+    SUMMARY_FAILED+=("$ORACLE_SID (SQL*Plus missing)")
+    continue
+  fi
+
+  if [ ! -x "$ORACLE_HOME/OPatch/datapatch" ]; then
+    echo "ERROR: Datapatch is not executable under $ORACLE_HOME." |
+      tee -a "$LOGFILE"
+
+    SUMMARY_FAILED+=("$ORACLE_SID (datapatch missing)")
+    continue
+  fi
+
+  #
+  # Connect to the database without making any changes.
+  # Return:
+  #   database version
+  #   open mode
+  #   CDB status
+  #
+  DB_INFO=$(
+    "$ORACLE_HOME/bin/sqlplus" -s / as sysdba <<EOF
+whenever sqlerror exit sql.sqlcode
+set heading off
+set feedback off
+set pagesize 0
+set verify off
+set echo off
+set trimspool on
+
+select version || '|' || open_mode || '|' || cdb
+from v\$instance cross join v\$database;
+
+exit
+EOF
+  )
+
+  SQL_RC=$?
+  DB_INFO=$(echo "$DB_INFO" | sed '/^[[:space:]]*$/d' | tail -1 | xargs)
+
+  if [ $SQL_RC -ne 0 ] || [ -z "$DB_INFO" ]; then
+    echo "ERROR: Unable to query database information from $ORACLE_SID." |
+      tee -a "$LOGFILE"
+
+    SUMMARY_FAILED+=("$ORACLE_SID (database query failed)")
+    continue
+  fi
+
+  DB_VERSION=$(echo "$DB_INFO" | cut -d'|' -f1 | xargs)
+  OPEN_MODE=$(echo "$DB_INFO"  | cut -d'|' -f2 | xargs)
+  CDB_STATUS=$(echo "$DB_INFO" | cut -d'|' -f3 | xargs)
+
+  echo "Database version : $DB_VERSION" | tee -a "$LOGFILE"
+  echo "Open mode        : $OPEN_MODE"   | tee -a "$LOGFILE"
+  echo "CDB              : $CDB_STATUS"  | tee -a "$LOGFILE"
+
+  #
+  # Skip everything except Oracle Database 19c.
+  #
+  case "$DB_VERSION" in
+    19.*)
+      echo "Version verification passed: $ORACLE_SID is Oracle 19c." |
+        tee -a "$LOGFILE"
+      ;;
+    *)
+      echo "SKIPPED: $ORACLE_SID is version $DB_VERSION, not Oracle 19c." |
+        tee -a "$LOGFILE"
+
+      SUMMARY_SKIPPED+=("$ORACLE_SID (version $DB_VERSION)")
+      continue
+      ;;
+  esac
+
+  #
+  # This version of the script is intended only for non-CDB databases.
+  #
+  if [ "$CDB_STATUS" != "NO" ]; then
+    echo "SKIPPED: $ORACLE_SID is a CDB. This script is for non-CDB databases." |
+      tee -a "$LOGFILE"
+
+    SUMMARY_SKIPPED+=("$ORACLE_SID (CDB)")
+    continue
+  fi
+
+  #
+  # Datapatch requires the database to be open read write.
+  #
+  if [ "$OPEN_MODE" != "READ WRITE" ]; then
+    echo "ERROR: $ORACLE_SID is not open READ WRITE. Current mode: $OPEN_MODE" |
+      tee -a "$LOGFILE"
+
+    SUMMARY_FAILED+=("$ORACLE_SID (open mode: $OPEN_MODE)")
+    continue
+  fi
+
+  #
+  # Verify that queryable inventory is available before datapatch.
+  #
+  echo "Checking queryable inventory for $ORACLE_SID..." |
+    tee -a "$LOGFILE"
+
+  QINV=$(
+    "$ORACLE_HOME/bin/sqlplus" -s / as sysdba <<EOF
+whenever sqlerror exit sql.sqlcode
+set heading off
+set feedback off
+set pagesize 0
+set verify off
+set echo off
+
+select dbms_sqlpatch.verify_queryable_inventory
+from dual;
+
+exit
+EOF
+  )
+
+  QINV_RC=$?
+  QINV=$(echo "$QINV" | sed '/^[[:space:]]*$/d' | tail -1 | xargs)
+
+  if [ $QINV_RC -ne 0 ] || [ "$QINV" != "OK" ]; then
+    echo "ERROR: Queryable inventory check failed for $ORACLE_SID." |
+      tee -a "$LOGFILE"
+    echo "Result: $QINV" | tee -a "$LOGFILE"
+
+    SUMMARY_FAILED+=("$ORACLE_SID (queryable inventory failed)")
+    continue
+  fi
+
+  echo "Queryable inventory check returned OK." |
+    tee -a "$LOGFILE"
+
+  #
+  # Run datapatch.
+  #
+  echo "" | tee -a "$LOGFILE"
+  echo "Running datapatch on $ORACLE_SID..." |
+    tee -a "$LOGFILE"
+
+  "$ORACLE_HOME/OPatch/datapatch" -verbose >>"$LOGFILE" 2>&1
+  DATAPATCH_RC=$?
+
+  if [ $DATAPATCH_RC -ne 0 ]; then
+    echo "ERROR: Datapatch failed for $ORACLE_SID, return code $DATAPATCH_RC." |
+      tee -a "$LOGFILE"
+
+    SUMMARY_FAILED+=("$ORACLE_SID (datapatch return code $DATAPATCH_RC)")
+    continue
+  fi
+
+  echo "Datapatch completed successfully for $ORACLE_SID." |
+    tee -a "$LOGFILE"
+
+  #
+  # Recompile invalid objects.
+  #
+  echo "Running utlrp.sql in $ORACLE_SID..." |
+    tee -a "$LOGFILE"
+
+  "$ORACLE_HOME/bin/sqlplus" -s / as sysdba >>"$LOGFILE" 2>&1 <<EOF
+whenever sqlerror exit sql.sqlcode
+@?/rdbms/admin/utlrp.sql
+exit
+EOF
+
+  UTLRP_RC=$?
+
+  if [ $UTLRP_RC -ne 0 ]; then
+    echo "ERROR: utlrp.sql failed for $ORACLE_SID, return code $UTLRP_RC." |
+      tee -a "$LOGFILE"
+
+    SUMMARY_FAILED+=("$ORACLE_SID (utlrp failed)")
+    continue
+  fi
+
+  #
+  # Verify invalid object count and target SQL patches.
+  #
+  echo "Checking invalid objects and SQL patch registry..." |
+    tee -a "$LOGFILE"
+
+  "$ORACLE_HOME/bin/sqlplus" -s / as sysdba >>"$LOGFILE" 2>&1 <<EOF
+whenever sqlerror exit sql.sqlcode
+
+set linesize 220
+set pagesize 100
+set feedback on
+set verify off
+
+prompt
+prompt ============================================================
+prompt Database information
+prompt ============================================================
+
+col instance_name format a15
+col version format a20
+col open_mode format a20
+
+select i.instance_name,
+       i.version,
+       d.open_mode
+from v\$instance i
+cross join v\$database d;
+
+prompt
+prompt ============================================================
+prompt Invalid object count
+prompt ============================================================
+
+select count(*) as invalid_objects
+from dba_objects
+where status = 'INVALID';
+
+prompt
+prompt ============================================================
+prompt Target patch status
+prompt ============================================================
+
+col action_time format a30
+col action format a10
+col status format a12
+col description format a80
+
+select patch_id,
+       patch_type,
+       action,
+       status,
+       action_time,
+       description
+from dba_registry_sqlpatch
+where patch_id in (39034528, 38906621)
+order by action_time desc;
+
+prompt
+prompt ============================================================
+prompt Failed SQL patch actions
+prompt ============================================================
+
+select patch_id,
+       action,
+       status,
+       action_time,
+       description
+from dba_registry_sqlpatch
+where status <> 'SUCCESS'
+order by action_time desc;
+
+exit
+EOF
+
+  VERIFY_RC=$?
+
+  if [ $VERIFY_RC -ne 0 ]; then
+    echo "ERROR: Post-datapatch verification failed for $ORACLE_SID." |
+      tee -a "$LOGFILE"
+
+    SUMMARY_FAILED+=("$ORACLE_SID (verification failed)")
+    continue
+  fi
+
+  SUMMARY_SUCCESS+=("$ORACLE_SID")
+
+  echo "Finished processing $ORACLE_SID successfully." |
+    tee -a "$LOGFILE"
+
+done
+
+echo "" | tee -a "$LOGFILE"
+echo "============================================================" | tee -a "$LOGFILE"
+echo "Summary for node $(hostname)"                                | tee -a "$LOGFILE"
+echo "Finished: $(date)"                                          | tee -a "$LOGFILE"
+echo "============================================================" | tee -a "$LOGFILE"
+
+if [ ${#SUMMARY_SUCCESS[@]} -gt 0 ]; then
+  echo "Datapatch completed successfully:" | tee -a "$LOGFILE"
+
+  for DB in "${SUMMARY_SUCCESS[@]}"; do
+    echo "  - $DB" | tee -a "$LOGFILE"
+  done
+else
+  echo "No databases were patched successfully." | tee -a "$LOGFILE"
+fi
+
+echo "" | tee -a "$LOGFILE"
+
+if [ ${#SUMMARY_SKIPPED[@]} -gt 0 ]; then
+  echo "Skipped:" | tee -a "$LOGFILE"
+
+  for DB in "${SUMMARY_SKIPPED[@]}"; do
+    echo "  - $DB" | tee -a "$LOGFILE"
+  done
+fi
+
+echo "" | tee -a "$LOGFILE"
+
+if [ ${#SUMMARY_FAILED[@]} -gt 0 ]; then
+  echo "Failed:" | tee -a "$LOGFILE"
+
+  for DB in "${SUMMARY_FAILED[@]}"; do
+    echo "  - $DB" | tee -a "$LOGFILE"
+  done
+fi
+
+echo "============================================================" | tee -a "$LOGFILE"
+
+if [ ${#SUMMARY_FAILED[@]} -gt 0 ]; then
+  exit 1
+fi
+
+exit 0

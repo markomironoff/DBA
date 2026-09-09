@@ -1,0 +1,75 @@
+#!/bin/bash
+#
+# apr16_oracle_datapatch_runner_19c.sh
+#
+# Runs datapatch on running Oracle 19c databases using the expected
+# Oracle 19c Database Home.
+#
+# Supports:
+#   - Oracle 19c non-CDB databases
+#   - Oracle 19c CDB databases
+#   - User PDBs that are open READ WRITE
+#
+# Excludes or skips:
+#   - ASM instances
+#   - Non-19c databases
+#   - Databases not open READ WRITE
+#   - Databases using an unexpected ORACLE_HOME
+#   - CDBs where one or more user PDBs are not open READ WRITE
+#
+# The script does not automatically open PDBs.
+#
+# Run as the oracle user.
+#
+# aseta:
+# EXPECTED_ORACLE_HOME
+# ORACLE_BASE
+#
+# grep -nE '&lt;|&gt;|<br>' oracle_datapatch_runner_19c.sh
+# file oracle_datapatch_runner_19c.sh
+# bash -n oracle_datapatch_runner_19c.sh
+# echo $?
+#Odotettu paluuarvo: 0
+#
+# Author: Marko Mironoff
+# Version: 2.1
+#
+
+###############################################################################
+# Configuration
+###############################################################################
+
+EXPECTED_ORACLE_HOME="/u01/app/oracle/product/19c/dbhome_1"
+
+TARGET_DB_RU_PATCH=39034528
+TARGET_OJVM_PATCH=38906621
+
+export ORACLE_BASE="/u01/app/oracle"
+
+HOSTNAME_SHORT=$(hostname -s)
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+LOGFILE="/tmp/oracle_datapatch_runner_19c_${HOSTNAME_SHORT}_${TIMESTAMP}.log"
+
+###############################################################################
+# Summary arrays
+###############################################################################
+
+SUMMARY_SUCCESS=()
+SUMMARY_SKIPPED=()
+SUMMARY_FAILED=()
+
+###############################################################################
+# Helper functions
+###############################################################################
+
+log()
+{
+    echo "$*" | tee -a "$LOGFILE"
+}
+
+print_separator()
+{
+    log "======================================================================"
+}
+
+#############################################################################
