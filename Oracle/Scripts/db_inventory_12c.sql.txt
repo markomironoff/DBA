@@ -1,0 +1,587 @@
+/*
+db_inventory_12c.sql
+run: sqlplus -s / as sysdba @db_inventory.sql
+
+Non-CDB databases
+CDB databases with PDBs
+Single-instance databases
+Oracle RAC databases
+PDB count and status
+SGA/PGA configuration per instance
+Total CDB/non-CDB allocated storage
+Temporary files
+Redo logs
+FRA
+Character sets
+Timezone file
+TDE wallet status
+
+*/
+
+whenever sqlerror exit sql.sqlcode
+whenever oserror exit failure
+
+set echo off
+set feedback off
+set verify off
+set heading off
+set pagesize 0
+set linesize 32767
+set trimspool on
+set tab off
+set sqlblanklines on
+set termout off
+set recsep off
+
+column output_file new_value output_file noprint
+
+select '/tmp/' ||
+       lower(name) ||
+       '_db_inventory_' ||
+       to_char(sysdate, 'YYYYMMDD_HH24MISS') ||
+       '.csv' as output_file
+from v$database;
+
+spool &output_file
+
+prompt "COLLECTION_HOST","DATABASE_NAME","DB_UNIQUE_NAME","DBID","DATABASE_CREATED","IS_CDB","INSTANCE_NAME","INSTANCE_NUMBER","THREAD_NUMBER","INSTANCE_HOST","ORACLE_VERSION","INSTANCE_STATUS","DATABASE_STATUS","INSTANCE_ROLE","RAC_PARALLEL","STARTUP_TIME","OPEN_MODE","DATABASE_ROLE","LOG_MODE","FORCE_LOGGING","FLASHBACK_ON","PROTECTION_MODE","PROTECTION_LEVEL","SWITCHOVER_STATUS","PLATFORM_NAME","COMPATIBLE","CLUSTER_DATABASE","CPU_COUNT","PROCESSES","SESSIONS","DB_BLOCK_SIZE_BYTES","SGA_TARGET_GB","SGA_MAX_SIZE_GB","CURRENT_SGA_GB","PGA_TARGET_GB","PGA_LIMIT_GB","CURRENT_PGA_GB","MAXIMUM_PGA_GB","MEMORY_TARGET_GB","MEMORY_MAX_TARGET_GB","CONTAINER_COUNT","PDB_COUNT","PDB_READ_WRITE_COUNT","PDB_READ_ONLY_COUNT","PDB_MOUNTED_COUNT","DATAFILE_COUNT","AUTOEXTEND_DATAFILE_COUNT","DATAFILE_ALLOCATED_GB","DATAFILE_ALLOCATED_TB","DATAFILE_MAX_GB","DATAFILE_MAX_TB","TEMPFILE_COUNT","AUTOEXTEND_TEMPFILE_COUNT","TEMPFILE_ALLOCATED_GB","TEMPFILE_MAX_GB","REDO_THREAD_COUNT","REDO_LOG_GROUP_COUNT","REDO_LOG_MEMBER_COUNT","REDO_LOG_TOTAL_GB","SMALLEST_REDO_LOG_MB","LARGEST_REDO_LOG_MB","CONTROLFILE_COUNT","USES_ASM","FRA_DESTINATION","FRA_LIMIT_GB","FRA_USED_GB","FRA_RECLAIMABLE_GB","FRA_FILE_COUNT","DATABASE_CHARSET","NATIONAL_CHARSET","TIMEZONE_FILE","TIMEZONE_VERSION","WALLET_STATUS","WALLET_TYPE","FILESYSTEMIO_OPTIONS","DISK_ASYNCH_IO","DB_WRITER_PROCESSES","COLLECTION_TIMESTAMP"
+
+with
+params as
+(
+    select
+        inst_id,
+        max(case when name = 'sga_target'
+                 then value end) as sga_target,
+        max(case when name = 'sga_max_size'
+                 then value end) as sga_max_size,
+        max(case when name = 'pga_aggregate_target'
+                 then value end) as pga_aggregate_target,
+        max(case when name = 'pga_aggregate_limit'
+                 then value end) as pga_aggregate_limit,
+        max(case when name = 'memory_target'
+                 then value end) as memory_target,
+        max(case when name = 'memory_max_target'
+                 then value end) as memory_max_target,
+        max(case when name = 'cpu_count'
+                 then value end) as cpu_count,
+        max(case when name = 'processes'
+                 then value end) as processes,
+        max(case when name = 'sessions'
+                 then value end) as sessions,
+        max(case when name = 'db_block_size'
+                 then value end) as db_block_size,
+        max(case when name = 'compatible'
+                 then value end) as compatible,
+        max(case when name = 'cluster_database'
+                 then value end) as cluster_database,
+        max(case when name = 'filesystemio_options'
+                 then value end) as filesystemio_options,
+        max(case when name = 'disk_asynch_io'
+                 then value end) as disk_asynch_io,
+        max(case when name = 'db_writer_processes'
+                 then value end) as db_writer_processes,
+        max(case when name = 'db_recovery_file_dest'
+                 then value end) as db_recovery_file_dest,
+        max(case when name = 'db_recovery_file_dest_size'
+                 then value end) as db_recovery_file_dest_size
+    from gv$system_parameter
+    where name in
+    (
+        'sga_target',
+        'sga_max_size',
+        'pga_aggregate_target',
+        'pga_aggregate_limit',
+        'memory_target',
+        'memory_max_target',
+        'cpu_count',
+        'processes',
+        'sessions',
+        'db_block_size',
+        'compatible',
+        'cluster_database',
+        'filesystemio_options',
+        'disk_asynch_io',
+        'db_writer_processes',
+        'db_recovery_file_dest',
+        'db_recovery_file_dest_size'
+    )
+    group by inst_id
+),
+sga_actual as
+(
+    select
+        inst_id,
+        sum(value) as sga_bytes
+    from gv$sga
+    group by inst_id
+),
+pga_actual as
+(
+    select
+        inst_id,
+        max(
+            case
+                when name = 'total PGA allocated'
+                then value
+            end
+        ) as pga_allocated_bytes,
+        max(
+            case
+                when name = 'maximum PGA allocated'
+                then value
+            end
+        ) as pga_max_allocated_bytes
+    from gv$pgastat
+    where name in
+    (
+        'total PGA allocated',
+        'maximum PGA allocated'
+    )
+    group by inst_id
+),
+container_summary as
+(
+    select
+        count(*) as container_count,
+        sum(
+            case
+                when con_id > 2
+                then 1
+                else 0
+            end
+        ) as pdb_count,
+        sum(
+            case
+                when con_id > 2
+                 and open_mode = 'READ WRITE'
+                then 1
+                else 0
+            end
+        ) as pdb_read_write_count,
+        sum(
+            case
+                when con_id > 2
+                 and open_mode = 'READ ONLY'
+                then 1
+                else 0
+            end
+        ) as pdb_read_only_count,
+        sum(
+            case
+                when con_id > 2
+                 and open_mode = 'MOUNTED'
+                then 1
+                else 0
+            end
+        ) as pdb_mounted_count
+    from v$containers
+),
+data_size as
+(
+    select
+        count(*) as datafile_count,
+        sum(bytes) as datafile_bytes,
+        sum(
+            case
+                when autoextensible = 'YES'
+                then greatest(bytes, maxbytes)
+                else bytes
+            end
+        ) as datafile_maxbytes,
+        sum(
+            case
+                when autoextensible = 'YES'
+                then 1
+                else 0
+            end
+        ) as autoextend_datafile_count
+    from cdb_data_files
+),
+temp_size as
+(
+    select
+        count(*) as tempfile_count,
+        sum(bytes) as tempfile_bytes,
+        sum(
+            case
+                when autoextensible = 'YES'
+                then greatest(bytes, maxbytes)
+                else bytes
+            end
+        ) as tempfile_maxbytes,
+        sum(
+            case
+                when autoextensible = 'YES'
+                then 1
+                else 0
+            end
+        ) as autoextend_tempfile_count
+    from cdb_temp_files
+),
+redo_size as
+(
+    select
+        count(*) as redo_log_group_count,
+        count(distinct thread#) as redo_thread_count,
+        sum(bytes) as redo_bytes,
+        min(bytes) as smallest_redo_log_bytes,
+        max(bytes) as largest_redo_log_bytes
+    from v$log
+),
+redo_members as
+(
+    select
+        count(*) as redo_log_member_count
+    from v$logfile
+),
+fra as
+(
+    select
+        name,
+        space_limit,
+        space_used,
+        space_reclaimable,
+        number_of_files
+    from v$recovery_file_dest
+),
+charset_info as
+(
+    select
+        max(
+            case
+                when parameter = 'NLS_CHARACTERSET'
+                then value
+            end
+        ) as database_charset,
+        max(
+            case
+                when parameter = 'NLS_NCHAR_CHARACTERSET'
+                then value
+            end
+        ) as national_charset
+    from nls_database_parameters
+),
+timezone_info as
+(
+    select
+        filename,
+        version
+    from v$timezone_file
+),
+controlfile_info as
+(
+    select
+        count(*) as controlfile_count
+    from v$controlfile
+),
+asm_storage as
+(
+    select
+        case
+            when sum(
+                case
+                    when name like '+%'
+                    then 1
+                    else 0
+                end
+            ) > 0
+            then 'YES'
+            else 'NO'
+        end as uses_asm
+    from v$datafile
+),
+wallet_info as
+(
+    select
+        max(status) as wallet_status,
+        max(wallet_type) as wallet_type
+    from v$encryption_wallet
+)
+select
+    '"' || replace(
+        sys_context('USERENV', 'SERVER_HOST'),
+        '"',
+        '""'
+    ) || '",' ||
+
+    '"' || replace(d.name, '"', '""') || '",' ||
+    '"' || replace(d.db_unique_name, '"', '""') || '",' ||
+    to_char(d.dbid) || ',' ||
+
+    '"' || to_char(
+        d.created,
+        'YYYY-MM-DD HH24:MI:SS'
+    ) || '",' ||
+
+    '"' || d.cdb || '",' ||
+    '"' || replace(i.instance_name, '"', '""') || '",' ||
+    to_char(i.instance_number) || ',' ||
+    to_char(i.thread#) || ',' ||
+    '"' || replace(i.host_name, '"', '""') || '",' ||
+    '"' || replace(i.version, '"', '""') || '",' ||
+    '"' || replace(i.status, '"', '""') || '",' ||
+    '"' || replace(i.database_status, '"', '""') || '",' ||
+    '"' || replace(i.instance_role, '"', '""') || '",' ||
+    '"' || replace(i.parallel, '"', '""') || '",' ||
+
+    '"' || to_char(
+        i.startup_time,
+        'YYYY-MM-DD HH24:MI:SS'
+    ) || '",' ||
+
+    '"' || replace(d.open_mode, '"', '""') || '",' ||
+    '"' || replace(d.database_role, '"', '""') || '",' ||
+    '"' || replace(d.log_mode, '"', '""') || '",' ||
+    '"' || replace(d.force_logging, '"', '""') || '",' ||
+    '"' || replace(d.flashback_on, '"', '""') || '",' ||
+    '"' || replace(d.protection_mode, '"', '""') || '",' ||
+    '"' || replace(d.protection_level, '"', '""') || '",' ||
+    '"' || replace(d.switchover_status, '"', '""') || '",' ||
+    '"' || replace(d.platform_name, '"', '""') || '",' ||
+    '"' || replace(p.compatible, '"', '""') || '",' ||
+    '"' || replace(p.cluster_database, '"', '""') || '",' ||
+    nvl(p.cpu_count, '') || ',' ||
+    nvl(p.processes, '') || ',' ||
+    nvl(p.sessions, '') || ',' ||
+    nvl(p.db_block_size, '') || ',' ||
+
+    nvl(
+        to_char(
+            to_number(p.sga_target) / power(1024, 3),
+            'FM9999999990D00',
+            'NLS_NUMERIC_CHARACTERS=''.,'''
+        ),
+        ''
+    ) || ',' ||
+
+    nvl(
+        to_char(
+            to_number(p.sga_max_size) / power(1024, 3),
+            'FM9999999990D00',
+            'NLS_NUMERIC_CHARACTERS=''.,'''
+        ),
+        ''
+    ) || ',' ||
+
+    nvl(
+        to_char(
+            sa.sga_bytes / power(1024, 3),
+            'FM9999999990D00',
+            'NLS_NUMERIC_CHARACTERS=''.,'''
+        ),
+        ''
+    ) || ',' ||
+
+    nvl(
+        to_char(
+            to_number(p.pga_aggregate_target) / power(1024, 3),
+            'FM9999999990D00',
+            'NLS_NUMERIC_CHARACTERS=''.,'''
+        ),
+        ''
+    ) || ',' ||
+
+    nvl(
+        to_char(
+            to_number(p.pga_aggregate_limit) / power(1024, 3),
+            'FM9999999990D00',
+            'NLS_NUMERIC_CHARACTERS=''.,'''
+        ),
+        ''
+    ) || ',' ||
+
+    nvl(
+        to_char(
+            pa.pga_allocated_bytes / power(1024, 3),
+            'FM9999999990D00',
+            'NLS_NUMERIC_CHARACTERS=''.,'''
+        ),
+        ''
+    ) || ',' ||
+
+    nvl(
+        to_char(
+            pa.pga_max_allocated_bytes / power(1024, 3),
+            'FM9999999990D00',
+            'NLS_NUMERIC_CHARACTERS=''.,'''
+        ),
+        ''
+    ) || ',' ||
+
+    nvl(
+        to_char(
+            to_number(p.memory_target) / power(1024, 3),
+            'FM9999999990D00',
+            'NLS_NUMERIC_CHARACTERS=''.,'''
+        ),
+        ''
+    ) || ',' ||
+
+    nvl(
+        to_char(
+            to_number(p.memory_max_target) / power(1024, 3),
+            'FM9999999990D00',
+            'NLS_NUMERIC_CHARACTERS=''.,'''
+        ),
+        ''
+    ) || ',' ||
+
+    to_char(nvl(cs.container_count, 0)) || ',' ||
+    to_char(nvl(cs.pdb_count, 0)) || ',' ||
+    to_char(nvl(cs.pdb_read_write_count, 0)) || ',' ||
+    to_char(nvl(cs.pdb_read_only_count, 0)) || ',' ||
+    to_char(nvl(cs.pdb_mounted_count, 0)) || ',' ||
+
+    to_char(ds.datafile_count) || ',' ||
+    to_char(ds.autoextend_datafile_count) || ',' ||
+
+    to_char(
+        ds.datafile_bytes / power(1024, 3),
+        'FM9999999990D00',
+        'NLS_NUMERIC_CHARACTERS=''.,'''
+    ) || ',' ||
+
+    to_char(
+        ds.datafile_bytes / power(1024, 4),
+        'FM9999999990D00',
+        'NLS_NUMERIC_CHARACTERS=''.,'''
+    ) || ',' ||
+
+    to_char(
+        ds.datafile_maxbytes / power(1024, 3),
+        'FM9999999990D00',
+        'NLS_NUMERIC_CHARACTERS=''.,'''
+    ) || ',' ||
+
+    to_char(
+        ds.datafile_maxbytes / power(1024, 4),
+        'FM9999999990D00',
+        'NLS_NUMERIC_CHARACTERS=''.,'''
+    ) || ',' ||
+
+    to_char(ts.tempfile_count) || ',' ||
+    to_char(ts.autoextend_tempfile_count) || ',' ||
+
+    to_char(
+        nvl(ts.tempfile_bytes, 0) / power(1024, 3),
+        'FM9999999990D00',
+        'NLS_NUMERIC_CHARACTERS=''.,'''
+    ) || ',' ||
+
+    to_char(
+        nvl(ts.tempfile_maxbytes, 0) / power(1024, 3),
+        'FM9999999990D00',
+        'NLS_NUMERIC_CHARACTERS=''.,'''
+    ) || ',' ||
+
+    to_char(rs.redo_thread_count) || ',' ||
+    to_char(rs.redo_log_group_count) || ',' ||
+    to_char(rm.redo_log_member_count) || ',' ||
+
+    to_char(
+        rs.redo_bytes / power(1024, 3),
+        'FM9999999990D00',
+        'NLS_NUMERIC_CHARACTERS=''.,'''
+    ) || ',' ||
+
+    to_char(
+        rs.smallest_redo_log_bytes / power(1024, 2),
+        'FM9999999990D00',
+        'NLS_NUMERIC_CHARACTERS=''.,'''
+    ) || ',' ||
+
+    to_char(
+        rs.largest_redo_log_bytes / power(1024, 2),
+        'FM9999999990D00',
+        'NLS_NUMERIC_CHARACTERS=''.,'''
+    ) || ',' ||
+
+    to_char(cf.controlfile_count) || ',' ||
+    '"' || ast.uses_asm || '",' ||
+
+    '"' || replace(
+        nvl(f.name, p.db_recovery_file_dest),
+        '"',
+        '""'
+    ) || '",' ||
+
+    nvl(
+        to_char(
+            nvl(
+                f.space_limit,
+                to_number(p.db_recovery_file_dest_size)
+            ) / power(1024, 3),
+            'FM9999999990D00',
+            'NLS_NUMERIC_CHARACTERS=''.,'''
+        ),
+        ''
+    ) || ',' ||
+
+    nvl(
+        to_char(
+            f.space_used / power(1024, 3),
+            'FM9999999990D00',
+            'NLS_NUMERIC_CHARACTERS=''.,'''
+        ),
+        ''
+    ) || ',' ||
+
+    nvl(
+        to_char(
+            f.space_reclaimable / power(1024, 3),
+            'FM9999999990D00',
+            'NLS_NUMERIC_CHARACTERS=''.,'''
+        ),
+        ''
+    ) || ',' ||
+
+    nvl(to_char(f.number_of_files), '') || ',' ||
+
+    '"' || replace(ci.database_charset, '"', '""') || '",' ||
+    '"' || replace(ci.national_charset, '"', '""') || '",' ||
+    '"' || replace(ti.filename, '"', '""') || '",' ||
+    to_char(ti.version) || ',' ||
+
+    '"' || replace(nvl(wi.wallet_status, ''), '"', '""') || '",' ||
+    '"' || replace(nvl(wi.wallet_type, ''), '"', '""') || '",' ||
+    '"' || replace(nvl(p.filesystemio_options, ''), '"', '""') || '",' ||
+    '"' || replace(nvl(p.disk_asynch_io, ''), '"', '""') || '",' ||
+    '"' || replace(nvl(p.db_writer_processes, ''), '"', '""') || '",' ||
+
+    '"' || to_char(
+        systimestamp,
+        'YYYY-MM-DD HH24:MI:SS TZH:TZM'
+    ) || '"'
+from v$database d
+cross join gv$instance i
+join params p
+    on p.inst_id = i.inst_id
+left join sga_actual sa
+    on sa.inst_id = i.inst_id
+left join pga_actual pa
+    on pa.inst_id = i.inst_id
+cross join container_summary cs
+cross join data_size ds
+cross join temp_size ts
+cross join redo_size rs
+cross join redo_members rm
+cross join charset_info ci
+cross join timezone_info ti
+cross join controlfile_info cf
+cross join asm_storage ast
+cross join wallet_info wi
+left join fra f
+    on 1 = 1
+order by
+    i.instance_number;
+
+spool off
+set termout on
+
+prompt
+prompt Inventory CSV created:
+prompt &output_file
+prompt
+
+exit success

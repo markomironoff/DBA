@@ -1,28 +1,24 @@
+[oracle@KTPRODORA03 ~]$ cat apr26_oracle_datapatch_runner.sh
 #!/bin/bash
 #
 # oracle_datapatch_runner_19c.sh
 #
-# Runs datapatch on running Oracle 19c databases using the expected
-# Oracle 19c Database Home.
+# Runs datapatch only on running Oracle 19c non-CDB databases
+# using the expected Oracle 19c Database Home.
 #
-# Supports:
-#   - Oracle 19c non-CDB databases
-#   - Oracle 19c CDB databases
-#   - User PDBs that are open READ WRITE
-#
-# Excludes or skips:
+# Excludes:
 #   - ASM instances
-#   - Non-19c databases
+#   - Oracle 12c databases
+#   - CDB databases
 #   - Databases not open READ WRITE
 #   - Databases using an unexpected ORACLE_HOME
-#   - CDBs where one or more user PDBs are not open READ WRITE
 #
-# The script does not automatically open PDBs.
-#
-# Run as the oracle user.
+# Run as the oracle user separately on:
+#   - KTPRODORA03
+#   - KTPRODORA04
 #
 # Author: Marko Mironoff
-# Version: 2.1
+# Version: 2.0
 #
 
 ###############################################################################
@@ -112,9 +108,6 @@ for DB in $DB_LIST; do
 
     export ORACLE_SID="$DB"
 
-    PDB_LIST=""
-    PDB_STATUS=""
-
     print_separator
     log "Processing instance: ${ORACLE_SID}"
     print_separator
@@ -157,6 +150,10 @@ for DB in $DB_LIST; do
 
     ###########################################################################
     # Query database version, open mode and CDB status
+    #
+    # Quoted heredoc prevents the shell from expanding:
+    #   $instance
+    #   $database
     ###########################################################################
 
     DB_INFO=$(
@@ -234,7 +231,21 @@ EOF
     log "ORACLE_HOME check passed."
 
     ###########################################################################
-    # Require database root to be open READ WRITE
+    # This script is intended only for non-CDB databases
+    ###########################################################################
+
+    if [ "$CDB_STATUS" != "NO" ]; then
+        log "SKIPPED: ${ORACLE_SID} is a CDB."
+        log "This script is intended only for non-CDB databases."
+
+        SUMMARY_SKIPPED+=("${ORACLE_SID} (CDB)")
+        continue
+    fi
+
+    log "Non-CDB check passed."
+
+    ###########################################################################
+    # Require READ WRITE mode
     ###########################################################################
 
     if [ "$OPEN_MODE" != "READ WRITE" ]; then
@@ -245,135 +256,13 @@ EOF
         continue
     fi
 
-    log "Database open mode check passed."
-
-    ###########################################################################
-    # Check CDB and user PDB readiness
-    #
-    # PDB$SEED is excluded because it is normally READ ONLY.
-    # All user-created PDBs must be open READ WRITE.
-    ###########################################################################
-
-    if [ "$CDB_STATUS" = "YES" ]; then
-
-        log ""
-        log "CDB detected. Checking user PDB open modes..."
-
-        PDB_STATUS=$(
-            "${ORACLE_HOME}/bin/sqlplus" -s / as sysdba <<'EOF'
-whenever sqlerror exit sql.sqlcode
-
-set heading off
-set feedback off
-set pagesize 0
-set verify off
-set echo off
-set trimspool on
-
-select name || '|' || open_mode || '|' || restricted
-from v$pdbs
-where name <> 'PDB$SEED'
-order by con_id;
-
-exit
-EOF
-        )
-
-        PDB_STATUS_RC=$?
-
-        if [ $PDB_STATUS_RC -ne 0 ]; then
-            log "ERROR: Unable to query PDB status for ${ORACLE_SID}."
-            SUMMARY_FAILED+=("${ORACLE_SID} (PDB status query failed)")
-            continue
-        fi
-
-        PDB_STATUS=$(
-            echo "$PDB_STATUS" |
-                sed '/^[[:space:]]*$/d'
-        )
-
-        if [ -z "$PDB_STATUS" ]; then
-            log "CDB ${ORACLE_SID} has no user-created PDBs."
-        else
-            log "User PDB status:"
-
-            while IFS='|' read -r PDB_NAME PDB_OPEN_MODE PDB_RESTRICTED; do
-                PDB_NAME=$(echo "$PDB_NAME" | xargs)
-                PDB_OPEN_MODE=$(echo "$PDB_OPEN_MODE" | xargs)
-                PDB_RESTRICTED=$(echo "$PDB_RESTRICTED" | xargs)
-
-                log "  - ${PDB_NAME}: ${PDB_OPEN_MODE}, restricted=${PDB_RESTRICTED}"
-            done <<< "$PDB_STATUS"
-        fi
-
-        CLOSED_PDBS=$(
-            echo "$PDB_STATUS" |
-                awk -F'|' '
-                    {
-                        name=$1
-                        mode=$2
-
-                        gsub(/^[ \t]+|[ \t]+$/, "", name)
-                        gsub(/^[ \t]+|[ \t]+$/, "", mode)
-
-                        if (mode != "READ WRITE") {
-                            print name " (" mode ")"
-                        }
-                    }
-                '
-        )
-
-        if [ -n "$CLOSED_PDBS" ]; then
-            log "SKIPPED: Not all user PDBs in ${ORACLE_SID} are open READ WRITE."
-            log "Datapatch will not be run for this CDB."
-            log "PDBs not open READ WRITE:"
-
-            while IFS= read -r PDB_ENTRY; do
-                if [ -n "$PDB_ENTRY" ]; then
-                    log "  - ${PDB_ENTRY}"
-                fi
-            done <<< "$CLOSED_PDBS"
-
-            SUMMARY_SKIPPED+=(
-                "${ORACLE_SID} (one or more PDBs not READ WRITE)"
-            )
-            continue
-        fi
-
-        PDB_LIST=$(
-            echo "$PDB_STATUS" |
-                awk -F'|' '
-                    {
-                        name=$1
-                        mode=$2
-
-                        gsub(/^[ \t]+|[ \t]+$/, "", name)
-                        gsub(/^[ \t]+|[ \t]+$/, "", mode)
-
-                        if (mode == "READ WRITE") {
-                            print name
-                        }
-                    }
-                '
-        )
-
-        log "CDB/PDB readiness check passed."
-
-        if [ -n "$PDB_LIST" ]; then
-            log "User PDBs selected for post-datapatch processing:"
-
-            while IFS= read -r PDB_NAME; do
-                if [ -n "$PDB_NAME" ]; then
-                    log "  - ${PDB_NAME}"
-                fi
-            done <<< "$PDB_LIST"
-        fi
-    else
-        log "Non-CDB database detected."
-    fi
+    log "Open mode check passed."
 
     ###########################################################################
     # Validate datapatch executable
+    #
+    # This check is made only after confirming that the instance is a target
+    # Oracle 19c non-CDB database using the expected Oracle Home.
     ###########################################################################
 
     if [ ! -x "${ORACLE_HOME}/OPatch/datapatch" ]; then
@@ -430,9 +319,6 @@ EOF
 
     ###########################################################################
     # Run datapatch
-    #
-    # For a CDB, datapatch is run once against the CDB instance.
-    # Datapatch processes CDB$ROOT, PDB$SEED and open user PDBs.
     ###########################################################################
 
     log ""
@@ -456,11 +342,11 @@ EOF
     log "Datapatch completed successfully for ${ORACLE_SID}."
 
     ###########################################################################
-    # Run utlrp.sql in non-CDB or CDB root
+    # Run utlrp.sql
     ###########################################################################
 
     log ""
-    log "Running utlrp.sql in ${ORACLE_SID} root container..."
+    log "Running utlrp.sql in ${ORACLE_SID}..."
 
     "${ORACLE_HOME}/bin/sqlplus" -s / as sysdba >>"$LOGFILE" 2>&1 <<'EOF'
 whenever sqlerror exit sql.sqlcode
@@ -473,72 +359,23 @@ EOF
     UTLRP_RC=$?
 
     if [ $UTLRP_RC -ne 0 ]; then
-        log "ERROR: utlrp.sql failed in ${ORACLE_SID} root container."
+        log "ERROR: utlrp.sql failed for ${ORACLE_SID}."
         log "SQL*Plus return code: ${UTLRP_RC}"
 
-        SUMMARY_FAILED+=("${ORACLE_SID} (root utlrp failed)")
+        SUMMARY_FAILED+=("${ORACLE_SID} (utlrp failed)")
         continue
     fi
 
-    log "utlrp.sql completed successfully in ${ORACLE_SID} root container."
+    log "utlrp.sql completed successfully for ${ORACLE_SID}."
 
     ###########################################################################
-    # Run utlrp.sql in each user PDB
-    ###########################################################################
-
-    PDB_UTLRP_FAILED=0
-
-    if [ "$CDB_STATUS" = "YES" ] && [ -n "$PDB_LIST" ]; then
-
-        while IFS= read -r PDB_NAME; do
-
-            if [ -z "$PDB_NAME" ]; then
-                continue
-            fi
-
-            log ""
-            log "Running utlrp.sql in PDB ${PDB_NAME}..."
-
-            "${ORACLE_HOME}/bin/sqlplus" -s / as sysdba \
-                >>"$LOGFILE" 2>&1 <<EOF
-whenever sqlerror exit sql.sqlcode
-
-alter session set container = "${PDB_NAME}";
-
-@?/rdbms/admin/utlrp.sql
-
-exit
-EOF
-
-            PDB_UTLRP_RC=$?
-
-            if [ $PDB_UTLRP_RC -ne 0 ]; then
-                log "ERROR: utlrp.sql failed in PDB ${PDB_NAME}."
-                log "SQL*Plus return code: ${PDB_UTLRP_RC}"
-                PDB_UTLRP_FAILED=1
-            else
-                log "utlrp.sql completed successfully in PDB ${PDB_NAME}."
-            fi
-
-        done <<< "$PDB_LIST"
-    fi
-
-    if [ $PDB_UTLRP_FAILED -ne 0 ]; then
-        SUMMARY_FAILED+=(
-            "${ORACLE_SID} (one or more PDB utlrp runs failed)"
-        )
-        continue
-    fi
-
-    ###########################################################################
-    # Verify invalid objects and target patches in root container
+    # Verify invalid objects and target patches
     ###########################################################################
 
     log ""
-    log "Checking invalid objects and target SQL patches in root container..."
+    log "Checking invalid objects and target SQL patches..."
 
-    "${ORACLE_HOME}/bin/sqlplus" -s / as sysdba \
-        >>"$LOGFILE" 2>&1 <<EOF
+    "${ORACLE_HOME}/bin/sqlplus" -s / as sysdba >>"$LOGFILE" 2>&1 <<EOF
 whenever sqlerror exit sql.sqlcode
 
 set linesize 220
@@ -549,24 +386,22 @@ set trimspool on
 
 prompt
 prompt ======================================================================
-prompt Database and container information
+prompt Database information
 prompt ======================================================================
 
-column instance_name  format a15
-column version        format a20
-column open_mode      format a20
-column container_name format a30
+column instance_name format a15
+column version       format a20
+column open_mode     format a20
 
 select i.instance_name,
        i.version,
-       d.open_mode,
-       sys_context('USERENV', 'CON_NAME') as container_name
+       d.open_mode
 from v\$instance i
 cross join v\$database d;
 
 prompt
 prompt ======================================================================
-prompt Invalid object count in root container
+prompt Invalid object count
 prompt ======================================================================
 
 select count(*) as invalid_objects
@@ -575,12 +410,12 @@ where status = 'INVALID';
 
 prompt
 prompt ======================================================================
-prompt Target DB RU and OJVM patch status in root container
+prompt Target DB RU and OJVM patch status
 prompt ======================================================================
 
 column action_time format a30
 column action      format a10
-column status      format a25
+column status      format a12
 column description format a80
 
 select patch_id,
@@ -595,7 +430,7 @@ order by action_time desc;
 
 prompt
 prompt ======================================================================
-prompt Failed SQL patch actions in root container
+prompt Failed SQL patch actions
 prompt ======================================================================
 
 select patch_id,
@@ -616,118 +451,9 @@ EOF
         log "ERROR: Post-datapatch verification failed for ${ORACLE_SID}."
         log "SQL*Plus return code: ${VERIFY_RC}"
 
-        SUMMARY_FAILED+=("${ORACLE_SID} (root verification failed)")
+        SUMMARY_FAILED+=("${ORACLE_SID} (verification failed)")
         continue
     fi
-
-    ###########################################################################
-    # Verify invalid objects and target patches in each user PDB
-    ###########################################################################
-
-    PDB_VERIFY_FAILED=0
-
-    if [ "$CDB_STATUS" = "YES" ] && [ -n "$PDB_LIST" ]; then
-
-        while IFS= read -r PDB_NAME; do
-
-            if [ -z "$PDB_NAME" ]; then
-                continue
-            fi
-
-            log ""
-            log "Checking invalid objects and target patches in PDB ${PDB_NAME}..."
-
-            "${ORACLE_HOME}/bin/sqlplus" -s / as sysdba \
-                >>"$LOGFILE" 2>&1 <<EOF
-whenever sqlerror exit sql.sqlcode
-
-set linesize 220
-set pagesize 100
-set feedback on
-set verify off
-set trimspool on
-
-alter session set container = "${PDB_NAME}";
-
-prompt
-prompt ======================================================================
-prompt PDB information
-prompt ======================================================================
-
-column container_name format a30
-
-select sys_context('USERENV', 'CON_NAME') as container_name
-from dual;
-
-prompt
-prompt ======================================================================
-prompt Invalid object count in PDB ${PDB_NAME}
-prompt ======================================================================
-
-select count(*) as invalid_objects
-from dba_objects
-where status = 'INVALID';
-
-prompt
-prompt ======================================================================
-prompt Target DB RU and OJVM patch status in PDB ${PDB_NAME}
-prompt ======================================================================
-
-column action_time format a30
-column action      format a10
-column status      format a25
-column description format a80
-
-select patch_id,
-       patch_type,
-       action,
-       status,
-       action_time,
-       description
-from dba_registry_sqlpatch
-where patch_id in (${TARGET_DB_RU_PATCH}, ${TARGET_OJVM_PATCH})
-order by action_time desc;
-
-prompt
-prompt ======================================================================
-prompt Failed SQL patch actions in PDB ${PDB_NAME}
-prompt ======================================================================
-
-select patch_id,
-       action,
-       status,
-       action_time,
-       description
-from dba_registry_sqlpatch
-where status <> 'SUCCESS'
-order by action_time desc;
-
-exit
-EOF
-
-            PDB_VERIFY_RC=$?
-
-            if [ $PDB_VERIFY_RC -ne 0 ]; then
-                log "ERROR: Post-datapatch verification failed in PDB ${PDB_NAME}."
-                log "SQL*Plus return code: ${PDB_VERIFY_RC}"
-                PDB_VERIFY_FAILED=1
-            else
-                log "Post-datapatch verification completed for PDB ${PDB_NAME}."
-            fi
-
-        done <<< "$PDB_LIST"
-    fi
-
-    if [ $PDB_VERIFY_FAILED -ne 0 ]; then
-        SUMMARY_FAILED+=(
-            "${ORACLE_SID} (one or more PDB verification checks failed)"
-        )
-        continue
-    fi
-
-    ###########################################################################
-    # Database completed successfully
-    ###########################################################################
 
     SUMMARY_SUCCESS+=("${ORACLE_SID}")
 
