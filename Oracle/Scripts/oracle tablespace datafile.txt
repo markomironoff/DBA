@@ -1,5 +1,5 @@
 set linesize 200
-col file_name format a50
+col file_name format a60
 SELECT
     df.tablespace_name,
     ROUND(df.total_space_gb, 2) AS total_gb,
@@ -11,12 +11,12 @@ FROM
     (SELECT tablespace_name,
             SUM(bytes) / 1024 / 1024 / 1024 AS total_space_gb
      FROM dba_data_files
-     WHERE tablespace_name = 'POMSEXECLARGELX'
+     WHERE tablespace_name = 'DM_PRHAPR01_DOCBASE'
      GROUP BY tablespace_name) df,
     (SELECT tablespace_name,
             NVL(SUM(bytes),0) / 1024 / 1024 / 1024 AS free_space_gb
      FROM dba_free_space
-     WHERE tablespace_name = 'POMSEXECLARGELX'
+     WHERE tablespace_name = 'DM_PRHAPR01_DOCBASE'
      GROUP BY tablespace_name) fs
 WHERE df.tablespace_name = fs.tablespace_name;
 
@@ -24,7 +24,7 @@ SELECT file_name, bytes/1024/1024/1024 AS current_gb,
        maxbytes/1024/1024/1024 AS max_gb,
        autoextensible
 FROM dba_data_files
-WHERE tablespace_name = 'NRTDATA_LOB';
+WHERE tablespace_name = 'DM_PRHAPR01_DOCBASE';
 
 ALTER DATABASE DATAFILE '+DATA1/NRTPROD/DATAFILE/nrtodsdata.283.1210073553' RESIZE 10G;
 #OMF
@@ -37,12 +37,14 @@ FILE_NAME                                                    CURRENT_GB     MAX_
 
 # ASM
 SELECT
-  name,
-  ROUND(total_mb/1024, 2)        AS total_gb,
-  ROUND(free_mb/1024, 2)         AS free_gb,
-  ROUND(usable_file_mb/1024, 2)  AS usable_file_gb
+    name,
+    ROUND(total_mb/1024, 2)        AS total_gb,
+    ROUND(free_mb/1024, 2)         AS free_gb,
+    ROUND(usable_file_mb/1024, 2)  AS usable_file_gb,
+    ROUND((free_mb / total_mb) * 100, 2)           AS free_pct,
+    ROUND(((total_mb - free_mb) / total_mb) * 100, 2) AS used_pct
 FROM v$asm_diskgroup
-WHERE name = 'POMS_DATA';
+WHERE name = 'DATA19';
 
 NAME                             TOTAL_GB    FREE_GB USABLE_FILE_GB
 ------------------------------ ---------- ---------- --------------
@@ -57,6 +59,7 @@ POMS_DATA                            2100     250.42         250.42
 #AUTOEXTEND ON NEXT 1G MAXSIZE 33554416K;
 
 #MAXSIZE ei tarvita, voi lisätä
-ALTER TABLESPACE POMSEXECLARGE
-ADD DATAFILE '+POMS_DATA/MESESPP/pomsexeclarge07.dbf'
+ALTER TABLESPACE DM_PRHAPR01_DOCBASE
+ADD DATAFILE '+DATA'
+Size 10G
 AUTOEXTEND ON NEXT 1G;
