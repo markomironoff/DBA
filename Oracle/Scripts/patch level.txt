@@ -1,0 +1,10 @@
+# patch level
+
+set linesize 500
+col description format a70
+col status format a10
+select action_time,
+       status,
+       description
+from dba_registry_sqlpatch
+order by action_time desc;
